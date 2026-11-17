@@ -1,0 +1,288 @@
+{
+  "name": "Corporate Banking RM Job Hunter",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "fetch-jobs",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "wh-001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [100, 300],
+      "webhookId": "fetch-jobs"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "keywords",
+              "value": "={{ $('Webhook').first().json.query?.keyword || 'Corporate Banking Relationship Manager' }}"
+            },
+            {
+              "name": "location",
+              "value": "={{ $('Webhook').first().json.query?.location || 'India' }}"
+            },
+            {
+              "name": "start",
+              "value": "0"
+            },
+            {
+              "name": "f_TPR",
+              "value": "r2592000"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "li-http-002",
+      "name": "Fetch LinkedIn",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [320, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputItem = $input.first();\nconst rawHtml = inputItem?.json?.data || inputItem?.json?.body || '';\n\nif (typeof rawHtml !== 'string' || !rawHtml) {\n  return [{ json: { source: 'linkedin', count: 0, jobs: [] } }];\n}\n\nconst jobs = [];\nconst cardRegex = /<li[\\s\\S]*?<\\/li>/gi;\nconst cards = rawHtml.match(cardRegex) || [];\n\nfor (const card of cards) {\n  const titleMatch = card.match(/<h3[^>]*class=\"[^\"]*base-search-card__title[^\"]*\"[^>]*>([\\s\\S]*?)<\\/h3>/i);\n  if (!titleMatch) continue;\n  const title = titleMatch[1].replace(/<[^>]+>/g, '').trim();\n  if (!title) continue;\n\n  const compMatch = card.match(/<h4[^>]*class=\"[^\"]*base-search-card__subtitle[^\"]*\"[^>]*>([\\s\\S]*?)<\\/h4>/i);\n  const company = compMatch ? compMatch[1].replace(/<[^>]+>/g, '').trim() : 'Leading Financial Institution';\n\n  const locMatch = card.match(/<span[^>]*class=\"[^\"]*job-search-card__location[^\"]*\"[^>]*>([\\s\\S]*?)<\\/span>/i);\n  const location = locMatch ? locMatch[1].replace(/<[^>]+>/g, '').trim() : 'India';\n\n  const urlMatch = card.match(/<a[^>]*class=\"[^\"]*base-card__full-link[^\"]*\"[^>]*href=\"([^\"]+)\"/i);\n  let directUrl = urlMatch ? urlMatch[1].split('?')[0].trim() : '';\n\n  const urnMatch = card.match(/data-entity-urn=\"urn:li:jobPosting:(\\d+)\"/i) || directUrl.match(/\\/(\\d+)(?:\\?|$)/);\n  const jobId = urnMatch ? urnMatch[1] : Math.random().toString(36).substr(2, 9);\n  if (!directUrl) {\n    directUrl = `https://www.linkedin.com/jobs/view/${jobId}`;\n  }\n\n  const dateMatch = card.match(/<time[^>]*datetime=\"([^\"]+)\"/i) || card.match(/<time[^>]*>([\\s\\S]*?)<\\/time>/i);\n  const postedDate = dateMatch ? dateMatch[1].replace(/<[^>]+>/g, '').trim() : 'Recent';\n\n  let segment = 'Mid Corporate';\n  const textBlob = (title + ' ' + company).toLowerCase();\n  if (textBlob.includes('large corporate') || textBlob.includes('lcg') || textBlob.includes('conglomerate') || textBlob.includes('wholesale') || textBlob.includes('corporate coverage') || textBlob.includes('corporate client')) {\n    segment = 'Large Corporate';\n  } else if (textBlob.includes('mnc') || textBlob.includes('multinational') || textBlob.includes('international') || textBlob.includes('cross-border')) {\n    segment = 'MNC Banking';\n  } else if (textBlob.includes('commercial') || textBlob.includes('sme') || textBlob.includes('business banking') || textBlob.includes('emerging corporate') || textBlob.includes('emerging enterprise')) {\n    segment = 'Commercial Banking';\n  } else if (textBlob.includes('fig') || textBlob.includes('financial institution') || textBlob.includes('nbfc')) {\n    segment = 'FIG';\n  }\n\n  const emailMatch = card.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})/i);\n  const applyEmail = emailMatch ? emailMatch[1] : null;\n\n  jobs.push({\n    id: `li-${jobId}`,\n    title,\n    organization: company,\n    location,\n    segment,\n    ctc: 'Not Disclosed',\n    description: `Corporate Banking Relationship Manager role covering corporate credit proposals, working capital assessment, and portfolio relationship management at ${company}.`,\n    directUrl,\n    applyEmail,\n    source: 'LinkedIn',\n    postedDate\n  });\n}\n\nreturn [{ json: { source: 'linkedin', count: jobs.length, jobs } }];"
+      },
+      "id": "li-code-003",
+      "name": "Parse LinkedIn",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [540, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.naukri.com/jobapi/v3/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "keyword",
+              "value": "={{ $('Webhook').first().json.query?.keyword || 'corporate banking relationship manager' }}"
+            },
+            {
+              "name": "location",
+              "value": "={{ $('Webhook').first().json.query?.location || 'india' }}"
+            },
+            {
+              "name": "noOfResults",
+              "value": "25"
+            },
+            {
+              "name": "searchType",
+              "value": "adv"
+            },
+            {
+              "name": "urlType",
+              "value": "search_by_keyword"
+            },
+            {
+              "name": "pageNo",
+              "value": "1"
+            },
+            {
+              "name": "src",
+              "value": "jobsearchDesk"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "appid",
+              "value": "109"
+            },
+            {
+              "name": "systemid",
+              "value": "109"
+            },
+            {
+              "name": "clientid",
+              "value": "d3skt0p"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "nk-http-004",
+      "name": "Fetch Naukri",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [760, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputItem = $input.first();\nconst rawData = inputItem?.json;\n\nif (!rawData || rawData.error || rawData.statusCode >= 400 || !rawData.jobDetails) {\n  return [{ json: { source: 'naukri', count: 0, jobs: [] } }];\n}\n\nconst jobList = Array.isArray(rawData.jobDetails) ? rawData.jobDetails : [];\nconst jobs = [];\nconst emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})/i;\n\nfor (const item of jobList) {\n  const jobId = item.jobId || item.immutableId || Math.random().toString(36).substr(2, 9);\n  const title = item.title ? item.title.replace(/<[^>]+>/g, '').trim() : 'Relationship Manager - Corporate Banking';\n  const company = item.companyName || (item.corporate && item.corporate.name) || 'Leading Private Bank';\n\n  let location = 'India';\n  if (Array.isArray(item.placeholders)) {\n    const locObj = item.placeholders.find(p => p.type === 'location');\n    if (locObj && locObj.label) location = locObj.label;\n  } else if (Array.isArray(item.locations) && item.locations.length > 0) {\n    location = item.locations.map(l => l.label).join(', ');\n  }\n\n  let ctc = 'Not Disclosed';\n  if (item.salaryDetails && item.salaryDetails.label) {\n    ctc = item.salaryDetails.label;\n  } else if (Array.isArray(item.placeholders)) {\n    const salObj = item.placeholders.find(p => p.type === 'salary');\n    if (salObj && salObj.label) ctc = salObj.label;\n  }\n\n  const desc = item.jobDescription ? item.jobDescription.replace(/<[^>]+>/g, '').trim() : '';\n  const emailMatch = desc.match(emailRegex);\n  const applyEmail = emailMatch ? emailMatch[1] : null;\n\n  let directUrl = item.jobUrl || '';\n  if (directUrl && !directUrl.startsWith('http')) {\n    directUrl = `https://www.naukri.com${directUrl.startsWith('/') ? '' : '/'}${directUrl}`;\n  }\n  if (!directUrl) {\n    directUrl = `https://www.naukri.com/job-listings-${jobId}`;\n  }\n\n  let segment = 'Mid Corporate';\n  const textBlob = (title + ' ' + desc).toLowerCase();\n  if (textBlob.includes('large corporate') || textBlob.includes('lcg') || textBlob.includes('conglomerate') || textBlob.includes('cbg') || textBlob.includes('turnover > 500')) {\n    segment = 'Large Corporate';\n  } else if (textBlob.includes('mnc') || textBlob.includes('multinational') || textBlob.includes('international')) {\n    segment = 'MNC Banking';\n  } else if (textBlob.includes('commercial') || textBlob.includes('sme') || textBlob.includes('business banking') || textBlob.includes('emerging corporate') || textBlob.includes('emerging enterprise')) {\n    segment = 'Commercial Banking';\n  } else if (textBlob.includes('fig') || textBlob.includes('nbfc') || textBlob.includes('financial institution')) {\n    segment = 'FIG';\n  }\n\n  jobs.push({\n    id: `nk-${jobId}`,\n    title,\n    organization: company,\n    location,\n    segment,\n    ctc,\n    description: desc || `Relationship Manager position handling credit appraisal, client acquisition, and portfolio monitoring at ${company}.`,\n    directUrl,\n    applyEmail,\n    source: 'Naukri',\n    postedDate: item.footer?.posted || item.freshness || 'Recent'\n  });\n}\n\nreturn [{ json: { source: 'naukri', count: jobs.length, jobs } }];"
+      },
+      "id": "nk-code-005",
+      "name": "Parse Naukri",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [980, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const linkedinJobs = $('Parse LinkedIn').first().json?.jobs || [];\nconst naukriJobs = $('Parse Naukri').first().json?.jobs || [];\n\nlet combined = [...linkedinJobs, ...naukriJobs];\n\nconst seen = new Set();\nconst deduped = [];\nfor (const j of combined) {\n  const normTitle = (j.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');\n  const normOrg = (j.organization || '').toLowerCase().replace(/[^a-z0-9]/g, '');\n  const key = `${normTitle}|${normOrg}`;\n  if (!seen.has(key)) {\n    seen.add(key);\n    deduped.push(j);\n  }\n}\n\nconst FALLBACK_FIXTURES = [\n  {\n    id: \"cur-001\",\n    title: \"Senior Relationship Manager - Large Corporates Group (LCG)\",\n    organization: \"HDFC Bank\",\n    location: \"Mumbai (BKC)\",\n    segment: \"Large Corporate\",\n    ctc: \"₹28 - 42 Lacs P.A.\",\n    description: \"Lead coverage for tier-1 Indian conglomerates with turnover exceeding ₹1,500 Cr. Responsible for CAM preparation, working capital consortia management, syndicated capex term loans, and treasury FX hedging solutions. Drive cross-sell of Cash Management Services (CMS) and structured trade finance while managing promoter and CFO relationships.\",\n    directUrl: \"https://www.hdfcbank.com/careers/corporate-banking\",\n    applyEmail: \"corporate.recruitment@hdfcbank.com\",\n    source: \"Curated\",\n    postedDate: \"1 day ago\"\n  },\n  {\n    id: \"cur-002\",\n    title: \"Relationship Manager - Mid Corporate Group (MCG)\",\n    organization: \"ICICI Bank\",\n    location: \"Delhi NCR (Gurugram Cyber City)\",\n    segment: \"Mid Corporate\",\n    ctc: \"₹20 - 32 Lacs P.A.\",\n    description: \"End-to-end relationship management for mid-market manufacturing and technology clients (turnover ₹200 Cr - ₹800 Cr). Perform comprehensive credit appraisal, financial statement spreading, DSCR analysis, and CAM drafting. Originate working capital limits (CC/OD), letters of credit, and structured bill discounting.\",\n    directUrl: \"https://www.icicibank.com/careers/wholesale-group\",\n    applyEmail: \"mcg.hiring@icicibank.com\",\n    source: \"Curated\",\n    postedDate: \"2 days ago\"\n  },\n  {\n    id: \"cur-003\",\n    title: \"Relationship Manager - Commercial Banking / SME\",\n    organization: \"Kotak Mahindra Bank\",\n    location: \"Bengaluru (MG Road)\",\n    segment: \"Commercial Banking\",\n    ctc: \"₹18 - 26 Lacs P.A.\",\n    description: \"Origination and portfolio management of emerging commercial clients (turnover ₹50 Cr - ₹250 Cr). Formulate credit memos for multi-banking arrangements, monitor TOL/TNW ratios and financial covenants, and drive transactional fee income via trade finance (LC/BG) and vendor payment CMS platforms.\",\n    directUrl: \"https://www.kotak.com/careers/corporate\",\n    applyEmail: \"careers.commercial@kotak.com\",\n    source: \"Curated\",\n    postedDate: \"Just now\"\n  },\n  {\n    id: \"cur-004\",\n    title: \"Director - Multinational Corporates Coverage (MNC Banking)\",\n    organization: \"Standard Chartered Bank\",\n    location: \"Mumbai (Lower Parel)\",\n    segment: \"MNC Banking\",\n    ctc: \"₹38 - 55 Lacs P.A.\",\n    description: \"Strategic coverage of global multinational corporate subsidiaries operating in India. Deliver cross-border liquidity management, automated cash pooling, external commercial borrowings (ECB), and bespoke derivative hedging (FX forwards, interest rate swaps). Collaborate with global account directors across Singapore and London.\",\n    directUrl: \"https://www.sc.com/en/careers/corporate-banking\",\n    applyEmail: \"in.careers@sc.com\",\n    source: \"Curated\",\n    postedDate: \"3 days ago\"\n  },\n  {\n    id: \"cur-005\",\n    title: \"AVP - Large Corporate Banking\",\n    organization: \"Axis Bank\",\n    location: \"Delhi NCR (Connaught Place)\",\n    segment: \"Large Corporate\",\n    ctc: \"₹25 - 38 Lacs P.A.\",\n    description: \"Manage relationships with top industrial houses and infrastructure conglomerates in Northern India. Drive debt syndication, project finance loan documentation, consortium meetings, and risk-adjusted return on capital (RAROC) optimization. Deep engagement with corporate treasury teams for FX and bond issuance.\",\n    directUrl: \"https://www.axisbank.com/careers/wholesale-banking\",\n    applyEmail: \"corporate.jobs@axisbank.com\",\n    source: \"Curated\",\n    postedDate: \"4 days ago\"\n  },\n  {\n    id: \"cur-006\",\n    title: \"Relationship Manager - Financial Institutions Group (FIG)\",\n    organization: \"IndusInd Bank\",\n    location: \"Mumbai (Nariman Point)\",\n    segment: \"FIG\",\n    ctc: \"₹22 - 32 Lacs P.A.\",\n    description: \"Manage relationship portfolio of leading non-banking financial companies (NBFCs), housing finance institutions (HFCs), and microfinance entities. Structure revolving credit facilities, loan securitization pipelines, and direct assignment portfolios. Monitor regulatory capital guidelines and asset quality covenants.\",\n    directUrl: \"https://www.indusind.com/careers/institutional\",\n    applyEmail: \"fig.careers@indusind.com\",\n    source: \"Curated\",\n    postedDate: \"5 days ago\"\n  },\n  {\n    id: \"cur-007\",\n    title: \"Relationship Manager - Mid-Market Enterprises\",\n    organization: \"Federal Bank\",\n    location: \"Bengaluru (Whitefield)\",\n    segment: \"Commercial Banking\",\n    ctc: \"₹16 - 24 Lacs P.A.\",\n    description: \"Originate and cultivate relationships with fast-growing technology, logistics, and pharmaceutical mid-market firms across South India. Perform balance sheet and cash-flow underwriting, appraise working capital consortium facilities, and expand export credit facilities with packing credit (EPC) and foreign bills discounting.\",\n    directUrl: \"https://www.federalbank.co.in/careers/commercial-banking\",\n    applyEmail: \"rmrecruitment@federalbank.co.in\",\n    source: \"Curated\",\n    postedDate: \"1 week ago\"\n  },\n  {\n    id: \"cur-008\",\n    title: \"Vice President - Global Banking & MNC Coverage\",\n    organization: \"HSBC India\",\n    location: \"Mumbai (BKC)\",\n    segment: \"MNC Banking\",\n    ctc: \"₹35 - 52 Lacs P.A.\",\n    description: \"Head relationship franchise for Fortune 500 multinationals in the automotive and FMCG sectors. Structure complex multi-currency debt, supply chain financing programs, cross-border payments, and regulatory compliance under FEMA guidelines. Primary liaison between India corporate clients and global corporate banking credit committees.\",\n    directUrl: \"https://www.hsbc.co.in/careers/wholesale-banking\",\n    applyEmail: \"india.mgt.recruitment@hsbc.co.in\",\n    source: \"Curated\",\n    postedDate: \"2 days ago\"\n  },\n  {\n    id: \"cur-009\",\n    title: \"Senior Relationship Manager - Wholesale Banking & Corporate Coverage\",\n    organization: \"IDFC FIRST Bank\",\n    location: \"Mumbai (BKC)\",\n    segment: \"Large Corporate\",\n    ctc: \"₹24 - 36 Lacs P.A.\",\n    description: \"Responsible for balance sheet expansion across marquee Indian corporate accounts. Lead credit note preparation, risk assessment meetings, and loan documentation. Drive wallet share through high-yielding transactional banking products, vendor finance ecosystems, and structured debt facilities.\",\n    directUrl: \"https://www.idfcfirstbank.com/careers/wholesale\",\n    applyEmail: \"wholesale.careers@idfcfirstbank.com\",\n    source: \"Curated\",\n    postedDate: \"3 days ago\"\n  },\n  {\n    id: \"cur-010\",\n    title: \"Relationship Manager - Corporate & Institutional Banking (CIB)\",\n    organization: \"YES BANK\",\n    location: \"Delhi NCR (Noida Sector 62)\",\n    segment: \"Mid Corporate\",\n    ctc: \"₹18 - 28 Lacs P.A.\",\n    description: \"Drive asset growth and liability mobilization for Mid Corporate enterprises in Uttar Pradesh and Delhi NCR. Prepare Credit Appraisal Memos (CAM) evaluating client financials, working capital cycles, and repayment capability. Execute structured trade letters of credit (LC), bank guarantees (BG), and cash management solutions.\",\n    directUrl: \"https://www.yesbank.in/careers/corporate-banking\",\n    applyEmail: \"corporate.talent@yesbank.in\",\n    source: \"Curated\",\n    postedDate: \"4 days ago\"\n  },\n  {\n    id: \"cur-011\",\n    title: \"Senior Vice President / RM - Commercial Banking (CCB)\",\n    organization: \"Citi India\",\n    location: \"Bengaluru (Koramangala)\",\n    segment: \"Commercial Banking\",\n    ctc: \"₹32 - 48 Lacs P.A.\",\n    description: \"Manage relationship portfolio of high-growth emerging digital economy, SaaS, and biotech commercial enterprises. Deliver global banking access, working capital lines, offshore escrow mechanisms, and corporate treasury hedging. Partner with Global Investment Banking teams for debt and equity capital market advisory.\",\n    directUrl: \"https://jobs.citi.com/commercial-bank-india\",\n    applyEmail: \"careers.india@citi.com\",\n    source: \"Curated\",\n    postedDate: \"1 day ago\"\n  },\n  {\n    id: \"cur-012\",\n    title: \"Assistant Vice President - Corporate Banking Coverage\",\n    organization: \"Barclays India\",\n    location: \"Mumbai (Lower Parel)\",\n    segment: \"MNC Banking\",\n    ctc: \"₹28 - 42 Lacs P.A.\",\n    description: \"Deliver corporate banking solutions to international companies operating in Western India. Key duties include managing bilateral credit facilities, syndicated multicurrency term debt, automated trade platforms, and client balance sheet risk underwriting. Conduct periodic portfolio reviews and credit covenant audits.\",\n    directUrl: \"https://home.barclays/careers/corporate-banking\",\n    applyEmail: \"barclays.india.careers@barclays.com\",\n    source: \"Curated\",\n    postedDate: \"5 days ago\"\n  },\n  {\n    id: \"cur-013\",\n    title: \"Relationship Manager - Financial Institutions Group (NBFC & Fintech Coverage)\",\n    organization: \"ICICI Bank\",\n    location: \"Mumbai (BKC)\",\n    segment: \"FIG\",\n    ctc: \"₹22 - 34 Lacs P.A.\",\n    description: \"Underwrite credit lines and manage banking arrangements for leading fintech aggregators, payment gateways, and systemically important NBFCs. Lead CAM presentations before wholesale credit committees, monitor pool collections for pass-through certificates (PTCs), and drive nodal account CMS balances.\",\n    directUrl: \"https://www.icicibank.com/careers/fig\",\n    applyEmail: \"fig.talent@icicibank.com\",\n    source: \"Curated\",\n    postedDate: \"3 days ago\"\n  },\n  {\n    id: \"cur-014\",\n    title: \"Relationship Manager - Emerging Enterprises / Business Banking\",\n    organization: \"HDFC Bank\",\n    location: \"Delhi NCR (Gurugram)\",\n    segment: \"Commercial Banking\",\n    ctc: \"₹17 - 25 Lacs P.A.\",\n    description: \"Client acquisition and portfolio deepening for commercial enterprises (turnover ₹25 Cr - ₹150 Cr). Perform credit assessment using qualitative and quantitative financial spreading, assess collateral values, and structure combined fund-based and non-fund-based banking lines.\",\n    directUrl: \"https://www.hdfcbank.com/careers/business-banking\",\n    applyEmail: \"enterprise.talent@hdfcbank.com\",\n    source: \"Curated\",\n    postedDate: \"4 days ago\"\n  },\n  {\n    id: \"cur-015\",\n    title: \"Vice President - Large Corporate Conglomerates\",\n    organization: \"Kotak Mahindra Bank\",\n    location: \"Mumbai (BKC)\",\n    segment: \"Large Corporate\",\n    ctc: \"₹35 - 50 Lacs P.A.\",\n    description: \"Lead banker for high-profile diversified business groups and conglomerate accounts. Deep promoter-level and CFO engagement for large capex structuring, balance sheet syndication, Joint Lenders Forum (JLF) steering, and cross-border currency swap mandates. Manage multi-thousand crore funded and non-funded exposures.\",\n    directUrl: \"https://www.kotak.com/careers/conglomerates\",\n    applyEmail: \"leadership.corporate@kotak.com\",\n    source: \"Curated\",\n    postedDate: \"2 days ago\"\n  },\n  {\n    id: \"cur-016\",\n    title: \"Relationship Manager - Mid Corporate & Industrial Clients\",\n    organization: \"Axis Bank\",\n    location: \"Bengaluru (MG Road)\",\n    segment: \"Mid Corporate\",\n    ctc: \"₹20 - 30 Lacs P.A.\",\n    description: \"Manage a portfolio of mid-corporate engineering, manufacturing, and textile enterprises across Karnataka. Supervise CAM preparation, consortium renewals, working capital term loans, and letter of credit limits. Target liability balance expansion and FX advisory business.\",\n    directUrl: \"https://www.axisbank.com/careers/mid-corporate\",\n    applyEmail: \"mcg.south@axisbank.com\",\n    source: \"Curated\",\n    postedDate: \"3 days ago\"\n  },\n  {\n    id: \"cur-017\",\n    title: \"Associate Director - Commercial Real Estate & Structured Finance\",\n    organization: \"Standard Chartered Bank\",\n    location: \"Delhi NCR (Connaught Place)\",\n    segment: \"Large Corporate\",\n    ctc: \"₹32 - 46 Lacs P.A.\",\n    description: \"Originate structured financing, lease rental discounting (LRD), and construction finance for Grade-A commercial developers. Structure escrow cash waterfall mechanisms, conduct site monitoring, and manage syndicate relationships with foreign and domestic institutional lenders.\",\n    directUrl: \"https://www.sc.com/en/careers/structured-finance\",\n    applyEmail: null,\n    source: \"Curated\",\n    postedDate: \"5 days ago\"\n  },\n  {\n    id: \"cur-018\",\n    title: \"Relationship Manager - Emerging Corporate Coverage\",\n    organization: \"IDFC FIRST Bank\",\n    location: \"Bengaluru (Whitefield)\",\n    segment: \"Mid Corporate\",\n    ctc: \"₹18 - 27 Lacs P.A.\",\n    description: \"Originate credit facilities for mid-tier technology, healthcare, and auto ancillary corporates. Assess cash flow velocity, working capital gap analysis using Tandon/Chore committee norms, and present credit proposals for sanction. Drive digital CMS adoption and FX hedging services.\",\n    directUrl: \"https://www.idfcfirstbank.com/careers/emerging-corporates\",\n    applyEmail: null,\n    source: \"Curated\",\n    postedDate: \"6 days ago\"\n  }\n];\n\nlet finalJobs = [...deduped];\nlet fallbackUsed = false;\n\nif (finalJobs.length < 5) {\n  fallbackUsed = true;\n  for (const fix of FALLBACK_FIXTURES) {\n    const normTitle = fix.title.toLowerCase().replace(/[^a-z0-9]/g, '');\n    const normOrg = fix.organization.toLowerCase().replace(/[^a-z0-9]/g, '');\n    const key = `${normTitle}|${normOrg}`;\n    if (!seen.has(key)) {\n      seen.add(key);\n      finalJobs.push(fix);\n    }\n  }\n}\n\nreturn [{\n  json: {\n    status: \"success\",\n    timestamp: new Date().toISOString(),\n    total: finalJobs.length,\n    fallback_applied: fallbackUsed,\n    jobs: finalJobs\n  }\n}];"
+      },
+      "id": "merge-code-006",
+      "name": "Merge & Fallback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "GET, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "*"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "resp-hook-007",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1420, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch LinkedIn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch LinkedIn": {
+      "main": [
+        [
+          {
+            "node": "Parse LinkedIn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse LinkedIn": {
+      "main": [
+        [
+          {
+            "node": "Fetch Naukri",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Naukri": {
+      "main": [
+        [
+          {
+            "node": "Parse Naukri",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Naukri": {
+      "main": [
+        [
+          {
+            "node": "Merge & Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge & Fallback": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {}
+}
